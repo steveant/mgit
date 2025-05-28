@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse, urlunparse, unquote
 
-from dotenv import dotenv_values, load_dotenv
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.progress import Progress
 from rich.prompt import Confirm # Added import
@@ -27,8 +27,9 @@ from azure.devops.v7_1.core import CoreClient, TeamProjectReference
 from azure.devops.exceptions import ClientRequestError, AzureDevOpsAuthenticationError
 
 # Local imports
-from mgit.constants import DEFAULT_VALUES, __version__, CONFIG_DIR, CONFIG_FILE, UpdateMode
+from mgit.constants import DEFAULT_VALUES, __version__, UpdateMode
 from mgit.logging import setup_logging, MgitFormatter, ConsoleFriendlyRichHandler
+from mgit.config.manager import get_config_value, CONFIG_DIR, CONFIG_FILE, load_config_file, save_config_file
 
 # Configuration loading order:
 # 1. Environment variables (highest priority)
@@ -42,31 +43,7 @@ load_dotenv(
     override=True,
 )
 
-# Load global config file if environment variables are not set
-# Ensure config directory exists before setting up file logging
-CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-
-# Fix type hint for default_value
-def get_config_value(key: str, default_value: Optional[str] = None) -> str:
-    """
-    Get a configuration value with the following priority:
-    1. Environment variable
-    2. Global config file
-    3. Default value
-    """
-    # First check environment
-    env_value = os.environ.get(key)
-    if env_value:
-        return env_value
-
-    # Then check config file
-    if CONFIG_FILE.exists():
-        config_values = dotenv_values(dotenv_path=str(CONFIG_FILE))
-        if key in config_values and config_values[key]:
-            return config_values[key]
-
-    # Finally use default
-    return default_value or DEFAULT_VALUES.get(key, "")
+# Config directory creation is handled by the config module
 
 # -----------------------------------------------------------------------------
 # Logging Setup
@@ -864,21 +841,15 @@ def store_credentials(organization: str, pat: str):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
     # Read existing config if available
-    config_values = {}
-    if CONFIG_FILE.exists():
-        config_values = dotenv_values(dotenv_path=str(CONFIG_FILE))
+    config_values = load_config_file()
 
     # Update with new values
     config_values["AZURE_DEVOPS_ORG_URL"] = organization
     config_values["AZURE_DEVOPS_EXT_PAT"] = pat
 
     # Write back to config file
-    with CONFIG_FILE.open("w", encoding="utf-8") as f:
-        for k, v in config_values.items():
-            f.write(f"{k}={v}\n")
-
+    save_config_file(config_values)
     console.print(f"[green]✓[/green] Credentials stored in {CONFIG_FILE}")
-    os.chmod(CONFIG_FILE, 0o600)  # Set secure permissions
 
 
 # -----------------------------------------------------------------------------
@@ -907,9 +878,7 @@ def config(
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
     # Read existing config if available
-    config_values: Dict[str, Any] = {}
-    if CONFIG_FILE.exists():
-        config_values = dotenv_values(dotenv_path=str(CONFIG_FILE))
+    config_values: Dict[str, Any] = load_config_file()
 
     # If show option is specified, display current config and exit
     if show:
@@ -940,13 +909,7 @@ def config(
         config_values["DEFAULT_UPDATE_MODE"] = update_mode.value # Store enum value
 
     # Write updated config
-    with CONFIG_FILE.open("w", encoding="utf-8") as f:
-        for k, v in config_values.items():
-            f.write(f"{k}={v}\n")
-
-    # Set secure permissions on config file
-    os.chmod(CONFIG_FILE, 0o600)
-
+    save_config_file(config_values)
     console.print(f"[green]✓[/green] Configuration updated successfully in {CONFIG_FILE}")
 
 
