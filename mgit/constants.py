@@ -1,4 +1,6 @@
-"""Constants for mgit CLI tool."""
+"""Constants and default values for mgit."""
+from enum import Enum
+from pathlib import Path
 
 __version__ = "0.2.1"
 
@@ -11,3 +13,13 @@ DEFAULT_VALUES = {
     "DEFAULT_CONCURRENCY": "4",
     "DEFAULT_UPDATE_MODE": "skip",
 }
+
+# Configuration paths
+CONFIG_DIR = Path.home() / ".config" / "mgit"
+CONFIG_FILE = CONFIG_DIR / "config"
+
+
+class UpdateMode(str, Enum):
+    skip = "skip"
+    pull = "pull"
+    force = "force"
