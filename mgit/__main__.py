@@ -28,17 +28,8 @@ from azure.devops.v7_1.git import GitClient, GitRepository
 from azure.devops.v7_1.core import CoreClient, TeamProjectReference
 from azure.devops.exceptions import ClientRequestError, AzureDevOpsAuthenticationError
 
-__version__ = "0.2.1"
-
-# Default values used if environment variables and config file don't provide values
-DEFAULT_VALUES = {
-    "AZURE_DEVOPS_ORG_URL": "https://www.visualstudio.com",
-    "LOG_FILENAME": "mgit.log",
-    "LOG_LEVEL": "DEBUG",
-    "CON_LEVEL": "INFO",
-    "DEFAULT_CONCURRENCY": "4",
-    "DEFAULT_UPDATE_MODE": "skip",
-}
+# Local imports
+from mgit.constants import DEFAULT_VALUES, __version__, CONFIG_DIR, CONFIG_FILE, UpdateMode
 
 # Configuration loading order:
 # 1. Environment variables (highest priority)
@@ -53,8 +44,6 @@ load_dotenv(
 )
 
 # Load global config file if environment variables are not set
-CONFIG_DIR = Path.home() / ".config" / "mgit"
-CONFIG_FILE = CONFIG_DIR / "config"
 # Ensure config directory exists before setting up file logging
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -444,12 +433,6 @@ class GitManager:
             # Ensure stderr is bytes if stdout is bytes for CalledProcessError
             stderr_bytes = stderr if isinstance(stderr, bytes) else stderr.encode('utf-8', errors='replace')
             raise subprocess.CalledProcessError(return_code, cmd, output=stdout, stderr=stderr_bytes)
-
-
-class UpdateMode(str, Enum):
-    skip = "skip"
-    pull = "pull"
-    force = "force"
 
 
 @app.command()
