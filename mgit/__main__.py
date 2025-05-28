@@ -4,14 +4,12 @@ import asyncio
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess # Needed for CalledProcessError exception
 import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse, urlunparse, unquote
 
 from dotenv import load_dotenv
 from rich.console import Console
@@ -30,6 +28,8 @@ from azure.devops.exceptions import ClientRequestError, AzureDevOpsAuthenticatio
 from mgit.constants import DEFAULT_VALUES, __version__, UpdateMode
 from mgit.logging import setup_logging, MgitFormatter, ConsoleFriendlyRichHandler
 from mgit.config.manager import get_config_value, CONFIG_DIR, CONFIG_FILE, load_config_file, save_config_file
+from mgit.git import GitManager, embed_pat_in_url, sanitize_repo_name
+from mgit.commands.auth import app as auth_app
 
 # Configuration loading order:
 # 1. Environment variables (highest priority)
@@ -84,61 +84,14 @@ def main_options(
     pass
 
 
+# Add auth subcommand
+app.add_typer(auth_app, name="auth", help="Manage credentials for Git providers")
+
+
 # -----------------------------------------------------------------------------
 # Helper functions
 # -----------------------------------------------------------------------------
-def embed_pat_in_url(repo_url: str, pat: str) -> str:
-    """
-    Rewrite repo_url to embed the PAT as credentials:
-      https://org@dev.azure.com ->
-        https://PersonalAccessToken:PAT@dev.azure.com
-    That way 'git clone' won't prompt for credentials.
-    """
-    parsed = urlparse(repo_url)
-    # Some ADOS remoteUrls look like:
-    # 'https://org@dev.azure.com/org/project/_git/repo'
-    # We'll embed 'PersonalAccessToken:pat@' as netloc
-    # credentials, ignoring any existing user
-    # Some Azure DevOps setups require this exact username
-    username = "PersonalAccessToken"
-    netloc = f"{username}:{pat}@{parsed.hostname}"
-    if parsed.port:
-        netloc += f":{parsed.port}"
-
-    new_parsed = parsed._replace(netloc=netloc)
-    return urlunparse(new_parsed)
-
-def sanitize_repo_name(repo_url: str) -> str:
-    """
-    Extract and sanitize repository name from URL for use as a directory name.
-    Handles URL encoding, spaces, and special characters.
-
-    Example:
-      Input: https://dev.azure.com/org/project/_git/Repo%20Name%20With%20Spaces
-      Output: Repo_Name_With_Spaces
-    """
-    # Extract repo name from URL
-    parsed = urlparse(repo_url)
-    path_parts = parsed.path.split('/')
-    # The repo name is typically the last part of the path after _git
-    repo_name = ""
-    for i, part in enumerate(path_parts):
-        if part == "_git" and i + 1 < len(path_parts):
-            repo_name = path_parts[i + 1]
-            break
-
-    # If we couldn't find it after _git, use the last part of the path
-    if not repo_name and path_parts:
-        repo_name = path_parts[-1]
-
-    # Decode URL encoding
-    repo_name = unquote(repo_name)
-
-    # Replace spaces and special characters with underscores
-    # Keep alphanumeric, underscore, hyphen, and period
-    repo_name = re.sub(r'[^\w\-\.]', '_', repo_name)
-
-    return repo_name
+# Git-related helper functions moved to mgit.git.utils
 
 
 # -----------------------------------------------------------------------------
@@ -216,94 +169,7 @@ class AzDevOpsManager:
 # -----------------------------------------------------------------------------
 # Git Manager
 # -----------------------------------------------------------------------------
-class GitManager:
-    GIT_EXECUTABLE = "git"
-
-    # Fix type hint for dir_name
-    async def git_clone(
-        self, repo_url: str, output_dir: Path, dir_name: Optional[str] = None
-    ):
-        """
-        Use 'git clone' for the given repo_url, in output_dir.
-        Optionally specify a directory name to clone into.
-        Raises typer.Exit if the command fails.
-        """
-        # Format the message for better display in the console
-        # Truncate long URLs to prevent log line truncation
-        display_url = repo_url
-        if len(display_url) > 60:
-            parsed = urlparse(display_url)
-            path_parts = parsed.path.split('/')
-            if len(path_parts) > 2:
-                # Show just the end of the path (organization/project/repo)
-                short_path = '/'.join(path_parts[-3:])
-                display_url = f"{parsed.scheme}://{parsed.netloc}/.../{short_path}"
-
-        if dir_name:
-            display_dir = dir_name
-            if len(display_dir) > 40:
-                display_dir = display_dir[:37] + "..."
-
-            logger.info(
-                f"Cloning: [bold blue]{display_dir}[/bold blue]"
-            )
-            cmd = [self.GIT_EXECUTABLE, "clone", repo_url, dir_name]
-        else:
-            logger.info(
-                f"Cloning repository: {display_url} into {output_dir}"
-            )
-            cmd = [self.GIT_EXECUTABLE, "clone", repo_url]
-
-        await self._run_subprocess(cmd, cwd=output_dir)
-
-    async def git_pull(self, repo_dir: Path):
-        """
-        Use 'git pull' for the existing repo in repo_dir.
-        """
-        # Extract repo name from path for nicer logging
-        repo_name = repo_dir.name
-
-        # Format the output with consistent width to prevent truncation
-        # Limit the repo name to 40 characters if it's longer
-        display_name = repo_name
-        if len(display_name) > 40:
-            display_name = display_name[:37] + "..."
-
-        logger.info(f"Pulling: [bold green]{display_name}[/bold green]")
-        cmd = [self.GIT_EXECUTABLE, "pull"]
-        await self._run_subprocess(cmd, cwd=repo_dir)
-
-    @staticmethod
-    async def _run_subprocess(cmd: list, cwd: Path):
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=str(cwd),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await process.communicate()
-        if stdout:
-            for line in stdout.decode().splitlines():
-                logger.debug(f"[stdout] {line}")
-        if stderr:
-            for line in stderr.decode().splitlines():
-                logger.debug(f"[stderr] {line}")
-        if process.returncode != 0:
-            # Ensure returncode is an int for CalledProcessError
-            return_code = process.returncode
-            if return_code is None:
-                # This case should ideally not happen after communicate()
-                logger.error(f"Command '{' '.join(cmd)}' finished but return code is None. Assuming error.")
-                return_code = 1 # Assign a default error code
-
-            logger.error(
-                f"Command '{' '.join(cmd)}' failed "
-                f"with return code {return_code}."
-            )
-            # Raise the specific error for the caller to handle
-            # Ensure stderr is bytes if stdout is bytes for CalledProcessError
-            stderr_bytes = stderr if isinstance(stderr, bytes) else stderr.encode('utf-8', errors='replace')
-            raise subprocess.CalledProcessError(return_code, cmd, output=stdout, stderr=stderr_bytes)
+# GitManager class moved to mgit.git.manager
 
 
 @app.command()
