@@ -29,6 +29,7 @@ from azure.devops.exceptions import ClientRequestError, AzureDevOpsAuthenticatio
 # Local imports
 from mgit.constants import DEFAULT_VALUES, __version__, CONFIG_DIR, CONFIG_FILE, UpdateMode
 from mgit.logging import setup_logging, MgitFormatter, ConsoleFriendlyRichHandler
+from mgit.cli import app, main, entrypoint
 
 # Configuration loading order:
 # 1. Environment variables (highest priority)
@@ -81,31 +82,6 @@ logger = setup_logging(
 )
 
 console = Console()
-app = typer.Typer(
-    name="mgit",
-    help=f"Multi-Git CLI Tool v{__version__} - A utility for managing repositories across " # Updated version will be picked up here automatically
-    "multiple git platforms (Azure DevOps, GitHub, BitBucket) with bulk operations.",
-    add_completion=False,
-    no_args_is_help=True,
-)
-
-def version_callback(value: bool):
-    if value:
-        print(f"mgit version: {__version__}") # Updated version will be picked up here automatically
-        raise typer.Exit()
-
-@app.callback()
-def main_options(
-    version: Optional[bool] = typer.Option(
-        None, "--version", callback=version_callback, is_eager=True,
-        help="Show the application's version and exit."
-    )
-):
-    """
-    Multi-Git CLI Tool - Manage repos across multiple git platforms easily.
-    """
-    pass
-
 
 # -----------------------------------------------------------------------------
 # Helper functions
@@ -951,17 +927,6 @@ def config(
 
 
 # The callback is no longer needed since we're using Typer's built-in help
-
-
-def main():
-    # Call the app directly - Typer will handle no args case with help
-    app()
-
-
-# Needed for Windows-specific behavior (not called on Linux/Mac)
-def entrypoint():
-    """Entry point for the application when packaged."""
-    main()
 
 
 if __name__ == "__main__":

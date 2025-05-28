@@ -9,8 +9,8 @@ version callback, and main options configuration.
 from typing import Optional
 import typer
 
-# Import from constants module
 from mgit.constants import __version__
+
 
 # Initialize the main Typer app
 app = typer.Typer(
@@ -21,11 +21,13 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+
 def version_callback(value: bool):
     """Display the application version and exit."""
     if value:
         print(f"mgit version: {__version__}")
         raise typer.Exit()
+
 
 @app.callback()
 def main_options(
@@ -38,3 +40,14 @@ def main_options(
     Multi-Git CLI Tool - Manage repos across multiple git platforms easily.
     """
     pass
+
+
+def main():
+    """Main entry point for the CLI."""
+    # Call the app directly - Typer will handle no args case with help
+    app()
+
+
+def entrypoint():
+    """Entry point for the application when packaged."""
+    main()
