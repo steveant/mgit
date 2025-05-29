@@ -13,6 +13,13 @@ from mgit.config.manager import get_config_value, load_config_file, save_config_
 from mgit.providers.base import AuthMethod
 
 
+# Provider constants for easier access
+PROVIDER_AZUREDEVOPS = "azuredevops"
+PROVIDER_GITHUB = "github"
+PROVIDER_BITBUCKET = "bitbucket"
+SUPPORTED_PROVIDERS = [PROVIDER_AZUREDEVOPS, PROVIDER_GITHUB, PROVIDER_BITBUCKET]
+
+
 class ProviderType(Enum):
     """Supported provider types."""
     AZURE_DEVOPS = "azuredevops"
@@ -407,3 +414,74 @@ def migrate_legacy_config() -> None:
     if updates:
         config.update(updates)
         save_config_file(config)
+
+
+def get_provider_defaults(provider: str) -> Dict[str, Any]:
+    """Get default configuration values for a provider.
+    
+    Args:
+        provider: Provider name
+        
+    Returns:
+        Dictionary of default configuration values
+        
+    Raises:
+        ValueError: If provider is not supported
+    """
+    # Validate provider
+    try:
+        provider_type = ProviderType(provider.lower())
+    except ValueError:
+        raise ValueError(
+            f"Unsupported provider: {provider}. "
+            f"Supported providers: {', '.join([p.value for p in ProviderType])}"
+        )
+    
+    return PROVIDER_DEFAULTS[provider_type].copy()
+
+
+def list_provider_fields(provider: str) -> List[str]:
+    """List all configuration fields for a provider.
+    
+    This is an alias for list_provider_config_keys() to match the expected API.
+    
+    Args:
+        provider: Provider name
+        
+    Returns:
+        List of configuration fields
+        
+    Raises:
+        ValueError: If provider is not supported
+    """
+    return list_provider_config_keys(provider)
+
+
+def clear_provider_config(provider: str) -> None:
+    """Clear a provider's configuration.
+    
+    This is an alias for reset_provider_config() to match the expected API.
+    
+    Args:
+        provider: Provider name
+        
+    Raises:
+        ValueError: If provider is not supported
+    """
+    reset_provider_config(provider)
+
+
+def is_provider_configured(provider: str) -> bool:
+    """Check if a provider has all required configuration.
+    
+    Args:
+        provider: Provider name
+        
+    Returns:
+        True if provider is fully configured, False otherwise
+        
+    Raises:
+        ValueError: If provider is not supported
+    """
+    errors = validate_provider_config(provider)
+    return len(errors) == 0
