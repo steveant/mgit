@@ -1,6 +1,6 @@
 # mgit - Multi-Git CLI Tool 🚀
 
-A powerful command-line tool for managing repositories across multiple git platforms (Azure DevOps, GitHub, BitBucket Cloud). Clone entire projects, update multiple repositories, and automate your git workflows across different platforms.
+A powerful command-line tool for managing repositories across multiple git platforms. Currently supports Azure DevOps with GitHub and BitBucket Cloud providers in development. Clone entire projects, update multiple repositories, and automate your git workflows across different platforms.
 
 **Plus**: Built-in MAWEP (Multi-Agent Workflow Execution Process) support for orchestrating parallel AI development across multiple issues!
 
@@ -99,8 +99,9 @@ python -m mgit --version
 
 ### Authentication
 
-First, authenticate with Azure DevOps:
+mgit supports multiple git providers with different authentication methods:
 
+#### Azure DevOps (Current Implementation)
 ```bash
 # Interactive login with prompts
 python -m mgit login
@@ -109,12 +110,37 @@ python -m mgit login
 python -m mgit login --org https://dev.azure.com/your-org --pat your-pat
 ```
 
+#### GitHub (In Development)
+```bash
+# Personal Access Token authentication
+python -m mgit login --provider github --token your-github-pat
+
+# OAuth authentication (future)
+python -m mgit login --provider github --oauth
+```
+
+#### BitBucket Cloud (In Development)
+```bash
+# App Password authentication (recommended)
+python -m mgit login --provider bitbucket --workspace your-workspace --app-password your-app-password
+
+# OAuth 2.0 (future)
+python -m mgit login --provider bitbucket --oauth
+```
+
 ### Clone All Repositories
 
-Clone all repositories from a project:
+Clone all repositories from a project/organization:
 
 ```bash
+# Azure DevOps (default)
 python -m mgit clone-all my-project ./repos
+
+# GitHub organization
+python -m mgit clone-all --provider github --org octocat ./repos
+
+# BitBucket workspace
+python -m mgit clone-all --provider bitbucket --workspace atlassian --project my-project ./repos
 ```
 
 With custom options:
@@ -122,6 +148,12 @@ With custom options:
 ```bash
 # Clone with 8 concurrent operations and force mode (overwrite existing repos)
 python -m mgit clone-all my-project ./repos -c 8 -u force
+
+# GitHub with filtering
+python -m mgit clone-all --provider github --org octocat ./repos --filter "language:python" --exclude-forks
+
+# BitBucket with specific project
+python -m mgit clone-all --provider bitbucket --workspace atlassian --project PROJ ./repos
 ```
 
 ### Update All Repositories
@@ -129,7 +161,14 @@ python -m mgit clone-all my-project ./repos -c 8 -u force
 Pull the latest changes for all repositories:
 
 ```bash
+# Azure DevOps
 python -m mgit pull-all my-project ./repos
+
+# GitHub
+python -m mgit pull-all --provider github ./repos
+
+# BitBucket
+python -m mgit pull-all --provider bitbucket ./repos
 ```
 
 ### Global Configuration
@@ -168,6 +207,15 @@ Run without arguments to see available commands:
 ```bash
 python -m mgit
 ```
+
+### Provider Quick Reference
+
+| Command | Azure DevOps | GitHub | BitBucket |
+|---------|--------------|--------|-----------|
+| **Login** | `mgit login --org URL --pat TOKEN` | `mgit login --provider github --token TOKEN` | `mgit login --provider bitbucket --workspace WS --app-password PASS` |
+| **Clone All** | `mgit clone-all PROJECT ./dest` | `mgit clone-all --provider github --org ORG ./dest` | `mgit clone-all --provider bitbucket --workspace WS --project PROJ ./dest` |
+| **Pull All** | `mgit pull-all PROJECT ./repos` | `mgit pull-all --provider github ./repos` | `mgit pull-all --provider bitbucket ./repos` |
+| **List Repos** | `mgit list PROJECT` | `mgit list --provider github --org ORG` | `mgit list --provider bitbucket --workspace WS` |
 
 ### Core Git Commands
 
@@ -268,20 +316,120 @@ Show help for any command.
 python -m mgit [command] --help
 ```
 
+## Provider Support
+
+mgit is designed to work with multiple git providers through a unified interface:
+
+### Supported Providers
+
+| Provider | Status | Authentication Methods | Features |
+|----------|--------|----------------------|----------|
+| **Azure DevOps** | ✅ Production Ready | Personal Access Token (PAT) | Full support for projects, clone-all, pull-all |
+| **GitHub** | 🚧 In Development | PAT, OAuth (planned) | Repository operations, no project hierarchy |
+| **BitBucket Cloud** | 🚧 In Development | App Password, OAuth (planned) | Workspace and project support |
+
+### Provider Architecture
+
+mgit uses a provider abstraction layer that allows consistent operations across different platforms:
+
+```python
+# Provider factory pattern for easy extension
+provider = ProviderFactory.create_provider('github', {
+    'token': 'your-github-pat',
+    'organization': 'your-org'
+})
+
+# Common interface across all providers
+repos = await provider.list_repositories('project-name')
+await provider.clone_repository(repo, destination)
+```
+
+### Provider-Specific Features
+
+#### Azure DevOps
+- Full project hierarchy support (Organization → Project → Repository)
+- Disabled repository handling
+- No rate limiting concerns
+- Supports continuation tokens for large projects
+
+#### GitHub
+- Flat organization structure (Organization → Repository)
+- Topic-based grouping instead of projects
+- Rate limiting: 5,000 requests/hour with authentication
+- Advanced search and filtering capabilities
+
+#### BitBucket Cloud
+- Workspace → Project → Repository hierarchy
+- App passwords required (PAT deprecated)
+- Rate limiting: 1,000 requests/hour
+- Project support (optional grouping)
+
 ## Configuration
 
-The tool uses a hierarchical configuration system:
+The tool uses a hierarchical configuration system with provider-specific options:
+
+### Global Configuration
 
 1. **Environment variables** (highest priority)
 2. **Global config** in `~/.config/mgit/config` (second priority)
 3. **Default values** in code (lowest priority)
 
-Key configuration options:
+### Provider-Specific Configuration
 
-- `AZURE_DEVOPS_ORG_URL`: Azure DevOps organization URL
-- `AZURE_DEVOPS_EXT_PAT`: Personal Access Token
+#### Azure DevOps
+```yaml
+# ~/.config/mgit/config
+provider: azuredevops
+azuredevops:
+  organization_url: https://dev.azure.com/your-org
+  pat: ${AZURE_DEVOPS_EXT_PAT}  # Can reference env vars
+  default_project: MyProject
+  concurrency: 8
+```
+
+#### GitHub
+```yaml
+# ~/.config/mgit/config
+provider: github
+github:
+  token: ${GITHUB_TOKEN}
+  organization: your-org
+  default_topics: ["managed-by-mgit"]
+  include_forks: false
+  include_archived: false
+```
+
+#### BitBucket Cloud
+```yaml
+# ~/.config/mgit/config
+provider: bitbucket
+bitbucket:
+  workspace: your-workspace
+  username: your-username
+  app_password: ${BITBUCKET_APP_PASSWORD}
+  default_project: my-project
+```
+
+### Environment Variables by Provider
+
+#### Common Variables
+- `MGIT_PROVIDER`: Default provider (azuredevops, github, bitbucket)
 - `DEFAULT_CONCURRENCY`: Number of concurrent operations (default: 4)
 - `DEFAULT_UPDATE_MODE`: Default update mode (skip, pull, force)
+
+#### Azure DevOps
+- `AZURE_DEVOPS_ORG_URL`: Organization URL
+- `AZURE_DEVOPS_EXT_PAT`: Personal Access Token
+
+#### GitHub
+- `GITHUB_TOKEN`: Personal Access Token
+- `GITHUB_ORG`: Default organization
+- `GITHUB_ENTERPRISE_URL`: For GitHub Enterprise Server
+
+#### BitBucket
+- `BITBUCKET_WORKSPACE`: Default workspace
+- `BITBUCKET_USERNAME`: Username for app password auth
+- `BITBUCKET_APP_PASSWORD`: App password
 
 ## Security
 
@@ -433,9 +581,153 @@ issues:
 
 ⚠️ **Agents don't work in the background!** Each agent invocation is a single request-response cycle. The orchestrator (you) must continuously invoke agents to keep work progressing. Think of it like conducting an orchestra - if you stop conducting, the music stops.
 
+## Provider Use Cases
+
+### Azure DevOps Example: Enterprise Microservices
+
+Managing a large microservices project with 50+ repositories:
+
+```bash
+# Initial setup
+mgit login --org https://dev.azure.com/contoso --pat $AZ_PAT
+mgit config --concurrency 16 --update-mode pull
+
+# Clone all microservices
+mgit clone-all MicroservicesProject ./microservices
+
+# Daily update routine
+mgit pull-all MicroservicesProject ./microservices
+
+# Work with specific team's repos
+mgit clone-all MicroservicesProject ./team-alpha --filter "team-alpha-*"
+```
+
+### GitHub Example: Open Source Organization
+
+Managing repositories across a GitHub organization:
+
+```bash
+# Setup for GitHub
+mgit login --provider github --token $GITHUB_TOKEN
+mgit config --provider github --org kubernetes
+
+# Clone all repos with specific language
+mgit clone-all --provider github --org kubernetes ./k8s-repos --filter "language:go"
+
+# Update all repos, excluding forks
+mgit pull-all --provider github ./k8s-repos --exclude-forks
+
+# Clone repos by topic
+mgit clone-all --provider github --org hashicorp ./terraform --filter "topic:terraform"
+```
+
+### BitBucket Example: Multi-Project Workspace
+
+Working with BitBucket Cloud workspace with multiple projects:
+
+```bash
+# BitBucket setup
+mgit login --provider bitbucket --workspace atlassian --app-password $BB_APP_PASS
+
+# Clone all repos from a specific project
+mgit clone-all --provider bitbucket --workspace atlassian --project CONF ./confluence-repos
+
+# Clone repos across multiple projects
+mgit clone-all --provider bitbucket --workspace atlassian ./all-repos
+
+# Update with concurrency control (respect rate limits)
+mgit pull-all --provider bitbucket ./all-repos --concurrency 4
+```
+
+### Cross-Provider Workflows
+
+Managing repositories across multiple providers:
+
+```bash
+# Clone from multiple providers into organized structure
+mkdir -p repos/{github,azure,bitbucket}
+
+# GitHub open source dependencies
+mgit clone-all --provider github --org react ./repos/github/react
+
+# Azure DevOps internal projects  
+mgit clone-all InternalProject ./repos/azure/internal
+
+# BitBucket vendor code
+mgit clone-all --provider bitbucket --workspace vendor --project SDK ./repos/bitbucket/sdk
+
+# Update everything
+for dir in repos/*; do
+    mgit pull-all --provider $(basename $dir) $dir/*
+done
+```
+
+## Migration Guide
+
+If you're upgrading from the Azure DevOps-only version of mgit:
+
+### Breaking Changes
+- The `login` command now requires `--provider` flag for non-Azure DevOps providers
+- Configuration file structure has changed to support multiple providers
+- Some command-line arguments have been renamed for consistency
+
+### Migration Steps
+
+1. **Update Configuration File**
+   ```yaml
+   # Old format
+   organization_url: https://dev.azure.com/your-org
+   pat: your-pat
+   
+   # New format
+   provider: azuredevops
+   azuredevops:
+     organization_url: https://dev.azure.com/your-org
+     pat: your-pat
+   ```
+
+2. **Update Scripts**
+   ```bash
+   # Old command (still works for Azure DevOps)
+   mgit clone-all my-project ./repos
+   
+   # New explicit command
+   mgit clone-all --provider azuredevops my-project ./repos
+   ```
+
+3. **Environment Variables**
+   - Existing Azure DevOps environment variables still work
+   - Add `MGIT_PROVIDER=azuredevops` to maintain current behavior
+
 ## For Developers
 
 For technical implementation details, architecture diagrams, and future improvement plans, please see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+### Provider Development
+
+To add support for a new git provider:
+
+1. **Implement the Provider Interface**
+   ```python
+   from mgit.providers.base import GitProvider
+   
+   class MyProvider(GitProvider):
+       PROVIDER_NAME = "myprovider"
+       # Implement required methods
+   ```
+
+2. **Register with Factory**
+   ```python
+   from mgit.providers.factory import ProviderFactory
+   ProviderFactory.register_provider("myprovider", MyProvider)
+   ```
+
+3. **Add Documentation**
+   - Update provider feature matrix
+   - Add configuration examples
+   - Document authentication flow
+
+See [docs/providers/](docs/providers/) for detailed provider implementation guides.
 
 ### Development Workflow
 
