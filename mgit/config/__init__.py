@@ -23,6 +23,9 @@ from .yaml_manager import (
     set_global_setting,
 )
 
+# Backwards compatibility
+from .manager import ConfigManager
+
 __all__ = [
     # Provider config
     "get_provider_configs",
@@ -43,4 +46,6 @@ __all__ = [
     # Paths
     "CONFIG_DIR",
     "CONFIG_FILE",
+    # Backwards compatibility
+    "ConfigManager",
 ]
