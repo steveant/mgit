@@ -1,4 +1,35 @@
-# CLAUDE.md
+# CLAUDE.md - DDD REFACTORING WORKTREE
+
+⚠️ **CRITICAL**: This is the feature-modularize-main-126 worktree with a BROKEN DDD refactoring.
+
+## 🚨 IMMEDIATE CONTEXT - READ THIS FIRST
+
+**Status**: This refactoring is BROKEN and cannot perform basic operations due to async/sync impedance mismatch.
+
+**Quick Test to Verify Issue**:
+```bash
+cd /opt/mgit-worktrees/feature-modularize-main-126
+poetry run python -m mgit clone-all "CSE" ./test-clone --config ado_pdidev -c 1
+# ERROR: 'async for' requires an object with __aiter__ method, got list
+```
+
+**Root Cause**: 
+- `ProviderOperations` interface is sync: `list_repositories() -> List[Repository]`
+- `ProviderManager` is async and returns different types based on context
+- `ProviderManagerAdapter` tries to bridge with `asyncio.run()` → nested event loop error
+
+**Critical Files**:
+1. `/mgit/infrastructure/provider_adapter.py` - The broken async/sync bridge (line 30-50)
+2. `/mgit/application/services/bulk_operation_service.py` - Expects sync list (line 108-110)
+3. `/mgit/application/ports.py` - Defines sync interfaces that should be async
+
+**What Was Lost**:
+- The `list` command with wildcard support (`mgit list "*/*/*"`) - KEY FEATURE
+- Options: `--dry-run`, `--exclude`, `--include`
+- Proper event loop management
+- Working git status implementation
+
+**Recommendation**: Make `ProviderOperations` interface async all the way up, or revert to simpler architecture.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
