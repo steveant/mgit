@@ -3,7 +3,7 @@
 from typing import Optional
 
 from mgit.config import ConfigManager
-from mgit.providers.manager_v2 import ProviderManager
+from mgit.providers.manager import ProviderManager
 from mgit.git.manager import GitManager
 from mgit.monitoring.logger_compat import get_logger
 from mgit.infrastructure.event_bus import InMemoryEventBus
