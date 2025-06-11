@@ -194,11 +194,11 @@ def list_projects(
             # List from all configured providers
             config = container.config_manager.config
             providers = []
-            if config.get("azure_devops", {}).get("pat"):
+            if config.get("azure_devops", {}).get("token"):
                 providers.append("azure-devops")
             if config.get("github", {}).get("token"):
                 providers.append("github")
-            if config.get("bitbucket", {}).get("pat"):
+            if config.get("bitbucket", {}).get("token"):
                 providers.append("bitbucket")
         
         if not providers:
