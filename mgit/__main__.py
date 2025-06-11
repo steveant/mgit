@@ -67,10 +67,10 @@ def config_callback(show: bool = False) -> None:
         for provider in ["azure_devops", "github", "bitbucket"]:
             provider_config = config.get(provider, {})
             if provider_config:
-                table.add_row(f"{provider.title()} Org", provider_config.get("org", "Not set"))
+                table.add_row(f"{provider.title()} URL", provider_config.get("url", "Not set"))
                 table.add_row(
                     f"{provider.title()} Token", 
-                    "****" if provider_config.get("pat") or provider_config.get("token") else "Not set"
+                    "****" if provider_config.get("token") else "Not set"
                 )
         
         console.print(table)
@@ -108,13 +108,9 @@ def login(
         if provider_key not in config:
             config[provider_key] = {}
         
-        config[provider_key]["org"] = org
-        
-        # Use appropriate token field based on provider
-        if provider_key == "github":
-            config[provider_key]["token"] = token
-        else:
-            config[provider_key]["pat"] = token
+        # Use unified field names for all providers
+        config[provider_key]["url"] = org
+        config[provider_key]["token"] = token
         
         # Save configuration
         config_manager.save_config(config)
